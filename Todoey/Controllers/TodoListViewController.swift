@@ -7,6 +7,8 @@
 //
 
 import UIKit
+import CoreData
+import SwipeCellKit
 
 class TodoListViewController: UITableViewController {
     
@@ -14,12 +16,17 @@ class TodoListViewController: UITableViewController {
     @IBOutlet weak var addButtonPressed: UIBarButtonItem!
     
     var itemArray = [ToDoItem]()
+    
     let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("ToDoItems.plist")
     
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+
     override func viewDidLoad() {
         super.viewDidLoad()
         // load up the array from user preferences (if we stored something in the file)
+        tableView.rowHeight = 80.0
         loadItems()
+        //print (dataFilePath)
     }
     
     //MARK - Tableview Datasource Methods
@@ -29,13 +36,15 @@ class TodoListViewController: UITableViewController {
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
+
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath) as! SwipeTableViewCell
         cell.textLabel?.text = itemArray[indexPath.row].title
         
         //Ternary Operator ==>
         //value = condition ? valueIfTrue : valueIfFalse
         cell.accessoryType = itemArray[indexPath.row].done ? .checkmark : .none
         self.saveItems()
+        cell.delegate = self
         return cell
     }
 
@@ -53,8 +62,9 @@ class TodoListViewController: UITableViewController {
         let alert = UIAlertController(title: "Add New Todoey Item", message: "", preferredStyle: .alert)
         let action = UIAlertAction(title: "Add Item", style: .default) { (action) in
             
-            let newToDoItem = ToDoItem()
+            let newToDoItem = ToDoItem(context: self.context)
             newToDoItem.title = newToDo.text!
+            newToDoItem.done = false
             
             //what will happen once the user clicks on the Add Item button on our UIAlert
             self.itemArray.append(newToDoItem)
@@ -74,27 +84,52 @@ class TodoListViewController: UITableViewController {
     
     //MARK - Model Manipulation Methods
     func saveItems() {
-        let encoder = PropertyListEncoder()
         do {
-            let data = try encoder.encode(itemArray)
-            try data.write(to: dataFilePath!)
+            try context.save()
         } catch {
-            print("Error encoding item array, \(error)")
+            print("Error saving to Core Data, \(error)")
             
         }
         
     }
     
     func loadItems() {
-        if let data = try? Data(contentsOf: dataFilePath!) {
-            let decoder = PropertyListDecoder()
-            do {
-                itemArray = try decoder.decode([ToDoItem].self, from: data)
-            } catch {
-                print("Error encoding item array, \(error)")
-            }
+        let request : NSFetchRequest<ToDoItem> = ToDoItem.fetchRequest()
+        do {
+            itemArray = try context.fetch(request)
+        } catch {
+                print("Error loadind item array, \(error)")
         }
     }
     
+    func deleteItems(rowNumber: Int) {
+//        do {
+//            try
+        context.delete(self.itemArray[rowNumber])
+//        } catch {
+//            print("Error deleting from  Core Data, \(error)")
+//        }
+         itemArray.remove(at: rowNumber)
+    }
 }
 
+//MARK - Swipe Cell Delegate Methods
+extension TodoListViewController: SwipeTableViewCellDelegate {
+    
+    func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> [SwipeAction]? {
+        guard orientation == .right else { return nil }
+        
+        let deleteAction = SwipeAction(style: .destructive, title: "Delete") { action, indexPath in
+            // handle action by updating model with deletion
+            self.deleteItems(rowNumber: indexPath.row)
+            self.tableView.reloadData()
+            print ("Item Deleted")
+        }
+        
+        // customize the action appearance
+        deleteAction.image = UIImage(named: "trash-icon")
+        
+        return [deleteAction]
+    }
+    
+}
