@@ -8,17 +8,8 @@
 
 import Foundation
 
-class ToDoItem {
-    
+class ToDoItem: Codable {
     var title: String = ""
     var done: Bool = false
     
-//    init(text: String, status: Bool) {
-//        title = text
-//        done = status
 }
-
-
-//class myOtherClass {
-//    let title = ToDoItem(text: "Enter First item here", done: false)
-//}
