@@ -16,6 +16,11 @@ class TodoListViewController: UITableViewController {
     @IBOutlet weak var addButtonPressed: UIBarButtonItem!
     
     var itemArray = [ToDoItem]()
+    var selectedCategory : Category? {
+        didSet{
+            loadItems()
+        }
+    }
     
     let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("ToDoItems.plist")
     
@@ -25,8 +30,6 @@ class TodoListViewController: UITableViewController {
         super.viewDidLoad()
         // load up the array from user preferences (if we stored something in the file)
         tableView.rowHeight = 80.0
-        loadItems()
-        //print (dataFilePath)
     }
     
     //MARK - Tableview Datasource Methods
@@ -50,9 +53,16 @@ class TodoListViewController: UITableViewController {
 
     //MARK - Tableview Delegate Methods
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+//        context.delete(itemArray[indexPath.row])
+//        itemArray.remove(at: indexPath.row)
+
+
         // assign the opposite value to item array flick from true to false or false to true
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
+        saveItems()
+        
         tableView.reloadData()
+        
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -65,6 +75,7 @@ class TodoListViewController: UITableViewController {
             let newToDoItem = ToDoItem(context: self.context)
             newToDoItem.title = newToDo.text!
             newToDoItem.done = false
+            newToDoItem.parentCategory = self.selectedCategory
             
             //what will happen once the user clicks on the Add Item button on our UIAlert
             self.itemArray.append(newToDoItem)
@@ -93,27 +104,65 @@ class TodoListViewController: UITableViewController {
         
     }
     
-    func loadItems() {
-        let request : NSFetchRequest<ToDoItem> = ToDoItem.fetchRequest()
+    func loadItems(with request: NSFetchRequest<ToDoItem> = ToDoItem.fetchRequest(), predicate : NSPredicate? = nil) {
+        //let request : NSFetchRequest<ToDoItem> = ToDoItem.fetchRequest()
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHEs %@", selectedCategory!.name!)
+        
+        if let additionalPredicate = predicate {
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+        } else {
+            request.predicate = categoryPredicate
+        }
+        
+        // sets the sort order for search results
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        
         do {
             itemArray = try context.fetch(request)
         } catch {
-                print("Error loadind item array, \(error)")
+                print("Error loading item array, \(error)")
         }
+        
+        tableView.reloadData()
+        
     }
     
     func deleteItems(rowNumber: Int) {
-//        do {
-//            try
         context.delete(self.itemArray[rowNumber])
-//        } catch {
-//            print("Error deleting from  Core Data, \(error)")
-//        }
          itemArray.remove(at: rowNumber)
+    }
+    
+
+}
+
+//MARK: - Search Bar Delegate Methods
+
+extension TodoListViewController: UISearchBarDelegate {
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        print (searchBar.text)
+        let request : NSFetchRequest<ToDoItem> = ToDoItem.fetchRequest()
+        
+        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        
+        // sets the sort order for search results
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        
+        loadItems(with: request, predicate: request.predicate)
+
+    }
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0{
+            loadItems()
+            DispatchQueue.main.async {
+                searchBar.resignFirstResponder()
+            }
+        }
     }
 }
 
-//MARK - Swipe Cell Delegate Methods
+//MARK: - Swipe Cell Delegate Methods
 extension TodoListViewController: SwipeTableViewCellDelegate {
     
     func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> [SwipeAction]? {
@@ -122,8 +171,7 @@ extension TodoListViewController: SwipeTableViewCellDelegate {
         let deleteAction = SwipeAction(style: .destructive, title: "Delete") { action, indexPath in
             // handle action by updating model with deletion
             self.deleteItems(rowNumber: indexPath.row)
-            self.tableView.reloadData()
-            print ("Item Deleted")
+            //self.tableView.reloadData()
         }
         
         // customize the action appearance
@@ -131,5 +179,13 @@ extension TodoListViewController: SwipeTableViewCellDelegate {
         
         return [deleteAction]
     }
+    
+    func tableView(_ tableView: UITableView, editActionsOptionsForRowAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> SwipeOptions {
+        var options = SwipeOptions()
+        options.expansionStyle = .destructive
+        return options
+    }
+    
+    
     
 }
